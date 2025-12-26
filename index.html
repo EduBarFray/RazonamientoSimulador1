@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador UNACH - Examen Estudiantil</title>
+    <title>Simulador ESPOCH - Examen Estudiantil</title>
     <!-- MathJax para renderizar ecuaciones -->
     <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         * {
             margin: 0;
@@ -664,6 +666,19 @@
             margin-top: 5px;
         }
         
+        .sync-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+        }
+        
         @media (max-width: 768px) {
             .exam-section {
                 flex-direction: column;
@@ -700,6 +715,13 @@
                 flex-direction: column;
                 align-items: center;
             }
+            
+            .sync-notification {
+                bottom: 10px;
+                right: 10px;
+                left: 10px;
+                text-align: center;
+            }
         }
     </style>
 </head>
@@ -710,7 +732,7 @@
                 <img src="logoelite.png" alt="Logo Elite">
             </div>
             <h1>SIMULADOR DE EXAMEN</h1>
-            <div class="subtitle">Evaluación de razonamiento</div>
+            <div class="subtitle">Evaluación de conocimientos generales</div>
             <div class="timer-container">
                 <div class="icon">⏱️</div>
                 <div class="timer">90:00</div>
@@ -735,7 +757,7 @@
         </div>
         
         <div class="welcome-screen" id="welcomeScreen">
-            <h2 class="welcome-title">Bienvenido al Simulador de Examen UNACH</h2>
+            <h2 class="welcome-title">Bienvenido al Simulador de Examen ESPOCH</h2>
             <div class="welcome-text">
                 <p>Este examen simulado te ayudará a prepararte para tus evaluaciones reales. El test consta de 66 preguntas con un tiempo límite de 90 minutos.</p>
                 <p>Demuestra tus conocimientos y descubre áreas de oportunidad para mejorar.</p>
@@ -908,12 +930,24 @@
         </div>
     </div>
     
+    <!-- Notificación de sincronización -->
+    <div class="sync-notification" id="syncNotification">
+        Sincronizando resultados con la nube...
+    </div>
+    
     <script>
+        // Configuración de Supabase con tus credenciales
+        const SUPABASE_URL = 'https://nshanvfvdnblzuwaqufr.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5zaGFudmZ2ZG5ibHp1d2FxdWZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY3MTQwNTAsImV4cCI6MjA4MjI5MDA1MH0.0BnhtNE0bM_FQbjlKcBGDHwOIhiSPTmfKAm5WQG0G7s';
+
+        // Inicializar cliente Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         // Lista de usuarios permitidos
         const allowedUsers = [
             "0605780477", "0606198018", "0650267933", "0605648575", "1550154395",
             "0605549375", "0202178612", "0650142060", "2000133799", "3050248388",
-            "0605416205", "0606071058", "0503653446", "ACADEMICO", "6699", "PATOLALLA"
+            "0605416205", "0606071058", "0503653446", "ACADEMICO"
         ];
 
         // Datos del examen con las 66 preguntas
@@ -1708,6 +1742,7 @@
         const academicResults = document.getElementById('academicResults');
         const backToLoginBtn = document.getElementById('backToLoginBtn');
         const reviewContent = document.getElementById('reviewContent');
+        const syncNotification = document.getElementById('syncNotification');
 
         // Inicializar el examen
         loginBtn.addEventListener('click', loginUser);
@@ -1756,6 +1791,127 @@
             localStorage.setItem('espochExamResults', JSON.stringify(examResults));
         }
 
+        // Mostrar notificación de sincronización
+        function showSyncNotification(message) {
+            syncNotification.textContent = message;
+            syncNotification.style.display = 'block';
+            setTimeout(() => {
+                syncNotification.style.display = 'none';
+            }, 3000);
+        }
+
+        // Función para guardar resultados en Supabase
+        async function saveResultsToSupabase(resultsData) {
+            try {
+                showSyncNotification('Guardando resultados en la nube...');
+                
+                const { data, error } = await supabase
+                    .from('exam_results')
+                    .insert([
+                        {
+                            student_id: currentUser,
+                            student_name: currentUser,
+                            attempt_number: userAttempts[currentUser],
+                            total_correct: resultsData.correct,
+                            total_questions: examData.length,
+                            percentage: Math.round((resultsData.correct / examData.length) * 100),
+                            section_scores: resultsData.sectionScores,
+                            answers: studentAnswers,
+                            exam_date: new Date().toISOString()
+                        }
+                    ]);
+                
+                if (error) {
+                    console.error('Error al guardar en Supabase:', error);
+                    // Guardar en localStorage como respaldo
+                    saveResultsToLocalBackup(resultsData);
+                    showSyncNotification('Error al guardar en la nube. Se guardó localmente.');
+                    return false;
+                }
+                
+                console.log('Resultados guardados en Supabase:', data);
+                showSyncNotification('Resultados guardados exitosamente');
+                return true;
+            } catch (err) {
+                console.error('Error:', err);
+                saveResultsToLocalBackup(resultsData);
+                showSyncNotification('Error de conexión. Se guardó localmente.');
+                return false;
+            }
+        }
+
+        // Función de respaldo en localStorage
+        function saveResultsToLocalBackup(resultsData) {
+            const backupKey = `exam_backup_${currentUser}_${Date.now()}`;
+            const backupData = {
+                student: currentUser,
+                attempt: userAttempts[currentUser],
+                results: resultsData,
+                answers: studentAnswers,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem(backupKey, JSON.stringify(backupData));
+            console.log('Resultados guardados en backup local:', backupKey);
+        }
+
+        // Función para sincronizar backups locales con Supabase
+        async function syncLocalBackups() {
+            const backups = [];
+            
+            // Buscar todas las keys de backup
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('exam_backup_')) {
+                    const backup = JSON.parse(localStorage.getItem(key));
+                    backups.push({
+                        key: key,
+                        data: backup
+                    });
+                }
+            }
+            
+            // Intentar enviar cada backup
+            for (const backup of backups) {
+                try {
+                    const success = await saveResultsToSupabase(backup.data.results);
+                    
+                    if (success) {
+                        // Eliminar backup local si se sincronizó exitosamente
+                        localStorage.removeItem(backup.key);
+                        console.log('Backup sincronizado y eliminado:', backup.key);
+                    }
+                } catch (err) {
+                    console.error('Error sincronizando backup:', err);
+                }
+            }
+        }
+
+        // Función para obtener todos los resultados de Supabase
+        async function getAllResultsFromSupabase() {
+            try {
+                showSyncNotification('Cargando resultados desde la nube...');
+                
+                const { data, error } = await supabase
+                    .from('exam_results')
+                    .select('*')
+                    .order('exam_date', { ascending: false });
+                
+                if (error) {
+                    console.error('Error al obtener resultados:', error);
+                    showSyncNotification('Error al cargar resultados');
+                    return null;
+                }
+                
+                showSyncNotification('Resultados cargados exitosamente');
+                return data;
+            } catch (err) {
+                console.error('Error:', err);
+                showSyncNotification('Error de conexión');
+                return null;
+            }
+        }
+
         function loginUser() {
             const username = usernameInput.value.trim().toUpperCase();
             
@@ -1766,7 +1922,6 @@
             
             // Usuario ACADEMICO tiene acceso especial
             if (username === "ACADEMICO") {
-                loadExamResults();
                 showAcademicResults();
                 return;
             }
@@ -1790,60 +1945,108 @@
             welcomeScreen.style.display = 'block';
         }
 
-        function showAcademicResults() {
+        async function showAcademicResults() {
             loginScreen.style.display = 'none';
             academicScreen.style.display = 'block';
             
-            let html = '<h3>Resultados de todos los estudiantes</h3>';
+            academicResults.innerHTML = '<p>Cargando resultados desde la nube...</p>';
             
-            if (examResults.length === 0) {
-                html += '<p>No hay resultados disponibles.</p>';
-            } else {
-                html += `
-                <table class="results-table">
-                    <thead>
-                        <tr>
-                            <th>Estudiante</th>
-                            <th>Intento</th>
-                            <th>Fecha</th>
-                            <th>Razonamiento Numérico</th>
-                            <th>Razonamiento Verbal</th>
-                            <th>Razonamiento Lógico</th>
-                            <th>Atención y Concentración</th>
-                            <th>Total</th>
-                            <th>Porcentaje</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                `;
-                
-                examResults.forEach(result => {
-                    const totalCorrect = result.sectionScores["RAZONAMIENTO NUMÉRICO"].correct +
-                                       result.sectionScores["RAZONAMIENTO VERBAL"].correct +
-                                       result.sectionScores["RAZONAMIENTO LÓGICO"].correct +
-                                       result.sectionScores["ATENCIÓN Y CONCENTRACIÓN"].correct;
-                    
-                    const percentage = ((totalCorrect / 66) * 100).toFixed(2);
-                    
-                    html += `
-                    <tr>
-                        <td>${result.student}</td>
-                        <td>${result.attempt}</td>
-                        <td>${result.date}</td>
-                        <td class="section-score">${result.sectionScores["RAZONAMIENTO NUMÉRICO"].correct}/20</td>
-                        <td class="section-score">${result.sectionScores["RAZONAMIENTO VERBAL"].correct}/15</td>
-                        <td class="section-score">${result.sectionScores["RAZONAMIENTO LÓGICO"].correct}/16</td>
-                        <td class="section-score">${result.sectionScores["ATENCIÓN Y CONCENTRACIÓN"].correct}/15</td>
-                        <td class="section-score">${totalCorrect}/66</td>
-                        <td class="section-score">${percentage}%</td>
-                    </tr>
-                    `;
-                });
-                
-                html += '</tbody></table>';
+            // Sincronizar backups locales primero
+            await syncLocalBackups();
+            
+            // Obtener resultados de Supabase
+            const results = await getAllResultsFromSupabase();
+            
+            if (!results || results.length === 0) {
+                academicResults.innerHTML = '<p>No hay resultados disponibles.</p>';
+                return;
             }
             
+            let html = '<h3>Resultados de todos los estudiantes</h3>';
+            html += `
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Estudiante</th>
+                        <th>Intento</th>
+                        <th>Fecha</th>
+                        <th>Razonamiento Numérico</th>
+                        <th>Razonamiento Verbal</th>
+                        <th>Razonamiento Lógico</th>
+                        <th>Atención y Concentración</th>
+                        <th>Total</th>
+                        <th>Porcentaje</th>
+                    </tr>
+                </thead>
+                <tbody>
+            `;
+            
+            results.forEach(result => {
+                const sectionScores = result.section_scores;
+                const totalCorrect = result.total_correct;
+                const percentage = result.percentage;
+                
+                html += `
+                <tr>
+                    <td>${result.student_id}</td>
+                    <td>${result.attempt_number}</td>
+                    <td>${new Date(result.exam_date).toLocaleString()}</td>
+                    <td class="section-score">${sectionScores["RAZONAMIENTO NUMÉRICO"]?.correct || 0}/20</td>
+                    <td class="section-score">${sectionScores["RAZONAMIENTO VERBAL"]?.correct || 0}/15</td>
+                    <td class="section-score">${sectionScores["RAZONAMIENTO LÓGICO"]?.correct || 0}/16</td>
+                    <td class="section-score">${sectionScores["ATENCIÓN Y CONCENTRACIÓN"]?.correct || 0}/15</td>
+                    <td class="section-score">${totalCorrect}/66</td>
+                    <td class="section-score">${percentage}%</td>
+                </tr>
+                `;
+            });
+            
+            html += '</tbody></table>';
+            
+            // Agregar botón para exportar a CSV
+            html += `
+            <button class="btn" id="exportBtn" style="margin-top: 20px; background: #28a745;">
+                <span class="icon">📊</span> Exportar a CSV
+            </button>
+            `;
+            
             academicResults.innerHTML = html;
+            
+            // Agregar funcionalidad de exportación
+            document.getElementById('exportBtn')?.addEventListener('click', () => {
+                exportToCSV(results);
+            });
+        }
+
+        // Función para exportar a CSV
+        function exportToCSV(results) {
+            let csv = 'Estudiante,Intento,Fecha,RN Correctas,RV Correctas,RL Correctas,AC Correctas,Total,Porcentaje\n';
+            
+            results.forEach(result => {
+                const sectionScores = result.section_scores;
+                const totalCorrect = result.total_correct;
+                const percentage = result.percentage;
+                
+                csv += `"${result.student_id}",`;
+                csv += `${result.attempt_number},`;
+                csv += `"${new Date(result.exam_date).toLocaleString()}",`;
+                csv += `${sectionScores["RAZONAMIENTO NUMÉRICO"]?.correct || 0},`;
+                csv += `${sectionScores["RAZONAMIENTO VERBAL"]?.correct || 0},`;
+                csv += `${sectionScores["RAZONAMIENTO LÓGICO"]?.correct || 0},`;
+                csv += `${sectionScores["ATENCIÓN Y CONCENTRACIÓN"]?.correct || 0},`;
+                csv += `${totalCorrect},`;
+                csv += `${percentage}\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `resultados_examen_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
         }
 
         function startExam() {
@@ -2046,7 +2249,7 @@
             progressBar.style.width = `${progress}%`;
         }
 
-        function finishExam() {
+        async function finishExam() {
             clearInterval(timerInterval);
             
             // Calcular resultados
@@ -2093,7 +2296,16 @@
                 });
             });
             
-            // Guardar resultados
+            // Guardar resultados en Supabase
+            const resultsData = {
+                correct: correct,
+                sectionScores: sectionScores
+            };
+            
+            // Guardar en Supabase (async)
+            saveResultsToSupabase(resultsData);
+            
+            // Guardar también en localStorage para respaldo inmediato
             loadExamResults();
             examResults.push({
                 student: currentUser,
@@ -2166,6 +2378,14 @@
                 const correctAnswer = item.correctAnswer;
                 const isCorrect = item.isCorrect;
                 
+                const studentAnswerText = studentAnswer ? 
+                    question.options.find(opt => opt.id === studentAnswer)?.text : 
+                    'No respondida';
+                
+                const correctAnswerText = correctAnswer ? 
+                    question.options.find(opt => opt.id === correctAnswer)?.text : 
+                    'No disponible';
+                
                 html += `
                 <div class="review-item ${isCorrect ? 'correct' : ''}">
                     <div class="review-question">
@@ -2173,14 +2393,14 @@
                     </div>
                     <div class="review-answer">
                         <div class="review-label">Tu respuesta:</div>
-                        <div class="review-value ${studentAnswer === correctAnswer ? 'correct' : 'incorrect'}">
-                            ${studentAnswer ? studentAnswer.toUpperCase() + '. ' + question.options.find(opt => opt.id === studentAnswer)?.text : 'No respondida'}
+                        <div class="review-value ${isCorrect ? 'correct' : 'incorrect'}">
+                            ${studentAnswer ? studentAnswer.toUpperCase() + '. ' + studentAnswerText : 'No respondida'}
                         </div>
                     </div>
                     <div class="review-answer">
                         <div class="review-label">Respuesta correcta:</div>
                         <div class="review-value correct">
-                            ${correctAnswer ? correctAnswer.toUpperCase() + '. ' + question.options.find(opt => opt.id === correctAnswer)?.text : 'No disponible'}
+                            ${correctAnswer ? correctAnswer.toUpperCase() + '. ' + correctAnswerText : 'No disponible'}
                         </div>
                     </div>
                     <div class="review-answer">
@@ -2209,11 +2429,21 @@
             loginScreen.style.display = 'block';
             usernameInput.value = '';
             timerDisplay.style.color = '#ffcc00';
+            
+            // Sincronizar backups al reiniciar
+            syncLocalBackups();
         }
 
         // Inicializar datos al cargar la página
         loadUserAttempts();
         loadExamResults();
+        
+        // Sincronizar backups al cargar la página
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                syncLocalBackups();
+            }, 2000);
+        });
     </script>
 </body>
 </html>
