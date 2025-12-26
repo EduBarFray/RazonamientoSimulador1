@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simulador ESPOCH - Examen Estudiantil</title>
+    <title>Simulador UNACH - Examen Estudiantil</title>
     <!-- MathJax para renderizar ecuaciones -->
     <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
     <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
@@ -621,6 +621,49 @@
             color: #dc3545;
         }
         
+        .section-results {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+        }
+        
+        .section-results h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #4a6491;
+        }
+        
+        .section-stats {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .stat-box {
+            text-align: center;
+            padding: 15px;
+            min-width: 120px;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+        
         @media (max-width: 768px) {
             .exam-section {
                 flex-direction: column;
@@ -646,6 +689,17 @@
                 display: block;
                 overflow-x: auto;
             }
+            
+            .score-container {
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+            }
+            
+            .section-stats {
+                flex-direction: column;
+                align-items: center;
+            }
         }
     </style>
 </head>
@@ -656,7 +710,7 @@
                 <img src="logoelite.png" alt="Logo Elite">
             </div>
             <h1>SIMULADOR DE EXAMEN</h1>
-            <div class="subtitle">Evaluación de conocimientos generales</div>
+            <div class="subtitle">Evaluación de razonamiento</div>
             <div class="timer-container">
                 <div class="icon">⏱️</div>
                 <div class="timer">90:00</div>
@@ -672,7 +726,7 @@
                     <input type="text" id="username" placeholder="Ingresa tu usuario">
                 </div>
                 <div class="attempts-info" id="attemptsInfo">
-                    Máximo 2 intentos por usuario
+                    Intentos ilimitados por usuario
                 </div>
                 <button class="btn start-btn" id="loginBtn">
                     <span class="icon">🔑</span> Ingresar
@@ -681,7 +735,7 @@
         </div>
         
         <div class="welcome-screen" id="welcomeScreen">
-            <h2 class="welcome-title">Bienvenido al Simulador de Examen ESPOCH</h2>
+            <h2 class="welcome-title">Bienvenido al Simulador de Examen UNACH</h2>
             <div class="welcome-text">
                 <p>Este examen simulado te ayudará a prepararte para tus evaluaciones reales. El test consta de 66 preguntas con un tiempo límite de 90 minutos.</p>
                 <p>Demuestra tus conocimientos y descubre áreas de oportunidad para mejorar.</p>
@@ -815,12 +869,16 @@
                     </div>
                 </div>
                 
+                <div id="sectionResults">
+                    <!-- Resultados por sección se cargarán aquí -->
+                </div>
+                
                 <div id="scoreMessage">
                     <!-- Mensaje de resultado se cargará aquí -->
                 </div>
                 
                 <button class="btn review-btn" id="reviewBtn">
-                    <span class="icon">🔍</span> Revisar Respuestas Incorrectas
+                    <span class="icon">🔍</span> Revisar Todas las Respuestas
                 </button>
                 
                 <button class="btn restart-btn" id="restartBtn">
@@ -830,7 +888,7 @@
         </div>
         
         <div class="review-container" id="reviewContainer">
-            <h2 class="review-title">Revisión de Respuestas Incorrectas</h2>
+            <h2 class="review-title">Revisión de Todas las Respuestas</h2>
             <div id="reviewContent">
                 <!-- Contenido de revisión se cargará aquí -->
             </div>
@@ -853,9 +911,9 @@
     <script>
         // Lista de usuarios permitidos
         const allowedUsers = [
-             "0605780477", "0606198018", "0650267933", "0605648575", "1550154395", 
-            "2101110662", "1753524220", "0605549375", "0202178612", "0000000000", 
-            "2000133799", "PATOLALLA", "6699", "ACADEMICO", "0650142060"
+            "0605780477", "0606198018", "0650267933", "0605648575", "1550154395",
+            "0605549375", "0202178612", "0650142060", "2000133799", "3050248388",
+            "0605416205", "0606071058", "0503653446", "ACADEMICO", "6699", "PATOLALLA"
         ];
 
         // Datos del examen con las 66 preguntas
@@ -1608,7 +1666,7 @@
         let currentUser = "";
         let userAttempts = {};
         let examResults = [];
-        let incorrectQuestions = [];
+        let allQuestionsReview = [];
 
         // Elementos del DOM
         const loginScreen = document.getElementById('loginScreen');
@@ -1640,6 +1698,7 @@
         const progressBar = document.getElementById('progressBar');
         const correctCount = document.getElementById('correctCount');
         const incorrectCount = document.getElementById('incorrectCount');
+        const sectionResults = document.getElementById('sectionResults');
         const scoreMessage = document.getElementById('scoreMessage');
         const resultName = document.getElementById('resultName');
         const resultAttempt = document.getElementById('resultAttempt');
@@ -1718,23 +1777,11 @@
                 userAttempts[username] = 0;
             }
             
-            // 6699 tiene intentos ilimitados
-            if (username !== "6699" && userAttempts[username] >= 2) {
-                alert(`Usuario ${username}, ya has completado tus 2 intentos permitidos.`);
-                return;
-            }
+            // Intentos ilimitados para todos los usuarios
+            userAttempts[username]++;
+            saveUserAttempts();
             
             currentUser = username;
-            // Solo incrementar intentos si no es 6699
-            if (username !== "6699") {
-                userAttempts[username]++;
-            } else {
-                // Para 6699, si no tiene intentos, inicializar en 1
-                if (!userAttempts[username]) {
-                    userAttempts[username] = 1;
-                }
-            }
-            saveUserAttempts();
             
             displayUserName.textContent = username;
             attemptNumber.textContent = userAttempts[username];
@@ -2005,7 +2052,7 @@
             // Calcular resultados
             let correct = 0;
             let incorrect = 0;
-            incorrectQuestions = [];
+            allQuestionsReview = [];
             let sectionScores = {
                 "RAZONAMIENTO NUMÉRICO": { correct: 0, total: 20 },
                 "RAZONAMIENTO VERBAL": { correct: 0, total: 15 },
@@ -2016,6 +2063,13 @@
             examData.forEach(question => {
                 const studentAnswer = studentAnswers[question.id];
                 let isCorrect = false;
+                let correctAnswer = null;
+                
+                // Encontrar la respuesta correcta
+                const correctOption = question.options.find(opt => opt.correct);
+                if (correctOption) {
+                    correctAnswer = correctOption.id;
+                }
                 
                 if (studentAnswer !== null) {
                     const selectedOption = question.options.find(opt => opt.id === studentAnswer);
@@ -2030,15 +2084,13 @@
                     incorrect++;
                 }
                 
-                // Guardar información de preguntas incorrectas
-                if (!isCorrect) {
-                    const correctOption = question.options.find(opt => opt.correct);
-                    incorrectQuestions.push({
-                        question: question,
-                        studentAnswer: studentAnswer,
-                        correctAnswer: correctOption ? correctOption.id : null
-                    });
-                }
+                // Guardar información para revisión de todas las preguntas
+                allQuestionsReview.push({
+                    question: question,
+                    studentAnswer: studentAnswer,
+                    correctAnswer: correctAnswer,
+                    isCorrect: isCorrect
+                });
             });
             
             // Guardar resultados
@@ -2056,6 +2108,29 @@
             correctCount.textContent = correct;
             incorrectCount.textContent = incorrect;
             
+            // Mostrar resultados por sección
+            let sectionHTML = '';
+            for (const section in sectionScores) {
+                const score = sectionScores[section];
+                const percentage = ((score.correct / score.total) * 100).toFixed(1);
+                sectionHTML += `
+                <div class="section-results">
+                    <h3>${section}</h3>
+                    <div class="section-stats">
+                        <div class="stat-box">
+                            <div class="stat-value">${score.correct}/${score.total}</div>
+                            <div class="stat-label">Aciertos</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">${percentage}%</div>
+                            <div class="stat-label">Porcentaje</div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }
+            sectionResults.innerHTML = sectionHTML;
+            
             // Mostrar mensaje según el puntaje
             const percentage = (correct / examData.length) * 100;
             let message = "";
@@ -2071,7 +2146,7 @@
             }
             
             scoreMessage.innerHTML = `
-                <h3>Tu puntuación: ${correct}/${examData.length} (${Math.round(percentage)}%)</h3>
+                <h3>Tu puntuación total: ${correct}/${examData.length} (${Math.round(percentage)}%)</h3>
                 <p>${message}</p>
             `;
             
@@ -2085,35 +2160,38 @@
             
             let html = '';
             
-            if (incorrectQuestions.length === 0) {
-                html = '<p>¡Felicidades! No tienes respuestas incorrectas.</p>';
-            } else {
-                incorrectQuestions.forEach((item, index) => {
-                    const question = item.question;
-                    const studentAnswer = item.studentAnswer;
-                    const correctAnswer = item.correctAnswer;
-                    
-                    html += `
-                    <div class="review-item">
-                        <div class="review-question">
-                            <strong>Pregunta ${question.id}:</strong> ${question.text}
-                        </div>
-                        <div class="review-answer">
-                            <div class="review-label">Tu respuesta:</div>
-                            <div class="review-value ${studentAnswer === correctAnswer ? 'correct' : 'incorrect'}">
-                                ${studentAnswer ? studentAnswer.toUpperCase() : 'No respondida'}
-                            </div>
-                        </div>
-                        <div class="review-answer">
-                            <div class="review-label">Respuesta correcta:</div>
-                            <div class="review-value correct">
-                                ${correctAnswer ? correctAnswer.toUpperCase() : 'No disponible'}
-                            </div>
+            allQuestionsReview.forEach((item, index) => {
+                const question = item.question;
+                const studentAnswer = item.studentAnswer;
+                const correctAnswer = item.correctAnswer;
+                const isCorrect = item.isCorrect;
+                
+                html += `
+                <div class="review-item ${isCorrect ? 'correct' : ''}">
+                    <div class="review-question">
+                        <strong>Pregunta ${question.id} (${question.section}):</strong> ${question.text}
+                    </div>
+                    <div class="review-answer">
+                        <div class="review-label">Tu respuesta:</div>
+                        <div class="review-value ${studentAnswer === correctAnswer ? 'correct' : 'incorrect'}">
+                            ${studentAnswer ? studentAnswer.toUpperCase() + '. ' + question.options.find(opt => opt.id === studentAnswer)?.text : 'No respondida'}
                         </div>
                     </div>
-                    `;
-                });
-            }
+                    <div class="review-answer">
+                        <div class="review-label">Respuesta correcta:</div>
+                        <div class="review-value correct">
+                            ${correctAnswer ? correctAnswer.toUpperCase() + '. ' + question.options.find(opt => opt.id === correctAnswer)?.text : 'No disponible'}
+                        </div>
+                    </div>
+                    <div class="review-answer">
+                        <div class="review-label">Resultado:</div>
+                        <div class="review-value ${isCorrect ? 'correct' : 'incorrect'}">
+                            ${isCorrect ? '✓ Correcta' : '✗ Incorrecta'}
+                        </div>
+                    </div>
+                </div>
+                `;
+            });
             
             reviewContent.innerHTML = html;
         }
@@ -2123,7 +2201,7 @@
             currentQuestion = 0;
             studentAnswers = {};
             timeLeft = 90 * 60;
-            incorrectQuestions = [];
+            allQuestionsReview = [];
             
             // Restablecer la interfaz
             resultsContainer.style.display = 'none';
